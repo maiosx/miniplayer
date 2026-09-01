@@ -79,12 +79,7 @@ Item {
     id: panel
     visible: root.opened
     implicitWidth: 420
-    implicitHeight: {
-      var itemCount = Math.max(1, root.mediaItems.length)
-      var mediaHeight = itemCount * 210
-      if (itemCount > 1) mediaHeight += (itemCount - 1) * 10
-      return Math.min(700, 36 + 10 + mediaHeight + 28)
-    }
+    implicitHeight: Math.min(700, 120 + Math.max(1, root.mediaItems.length) * 230)
     anchors.top: true
     anchors.right: true
     margins.top: 52
@@ -199,13 +194,13 @@ Item {
                   fillMode: VideoOutput.PreserveAspectCrop
                   autoPlay: true
                   loops: MediaPlayer.Infinite
-                  muted: !(mediaHover.containsMouse || audioUnlocked)
-                  volume: (mediaHover.containsMouse || audioUnlocked) ? 1.0 : 0.0
+                  muted: !(videoArea.containsMouse || audioUnlocked)
+                  volume: (videoArea.containsMouse || audioUnlocked) ? 1.0 : 0.0
                   visible: isVideo
                 }
 
                 MouseArea {
-                  id: mediaHover
+                  id: videoArea
                   anchors.fill: parent
                   hoverEnabled: true
                   acceptedButtons: Qt.NoButton
@@ -213,10 +208,30 @@ Item {
                 }
 
                 Rectangle {
+                  id: fullscreenToggle
+                  visible: opacity > 0
+                  opacity: isVideo && videoArea.containsMouse ? 1 : 0
+                  Behavior on opacity { NumberAnimation { duration: 120 } }
+                  anchors.top: parent.top
+                  anchors.left: parent.left
+                  anchors.margins: 7
+                  width: 30
+                  height: 30
+                  radius: 15
+                  color: "#99000000"
+                  Text { anchors.centerIn: parent; text: "⤢"; color: "white"; font.pixelSize: 15 }
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: video.fullScreen = !video.fullScreen
+                  }
+                }
+
+                Rectangle {
                   anchors.top: parent.top
                   anchors.right: parent.right
                   visible: opacity > 0
-                  opacity: mediaHover.containsMouse ? 1 : 0
+                  opacity: isVideo && videoArea.containsMouse ? 1 : 0
                   Behavior on opacity { NumberAnimation { duration: 120 } }
                   anchors.margins: 7
                   width: 30
@@ -233,7 +248,7 @@ Item {
                 Rectangle {
                   id: audioToggle
                   visible: opacity > 0
-                  opacity: isVideo && mediaHover.containsMouse ? 1 : 0
+                  opacity: isVideo && videoArea.containsMouse ? 1 : 0
                   Behavior on opacity { NumberAnimation { duration: 120 } }
                   anchors.bottom: parent.bottom
                   anchors.horizontalCenter: parent.horizontalCenter
