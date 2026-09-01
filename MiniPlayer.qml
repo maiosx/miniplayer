@@ -104,7 +104,7 @@ Item {
 
         Item {
           width: parent.width
-          height: 0
+          height: parent.height
 
           Text {
             text: "MiniPlayer"
