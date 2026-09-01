@@ -25,7 +25,7 @@ Suggested keybind in `~/.config/hypr/bindings.lua`:
 o.bind("SUPER + X", "miniplayer", "omarchy-shell shell toggle miniplayer")
 ```
 
-Then toggle it with the Omarchy plugin shell integration:
+Or toggle it with the Omarchy plugin shell integration:
 
 ```sh
 omarchy-shell shell toggle miniplayer
