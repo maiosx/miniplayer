@@ -24,7 +24,6 @@ Item {
     if (shell && typeof shell.hide === "function") shell.hide((manifest && manifest.id) || "miniplayer")
   }
   function save() {
-    writer.payload = JSON.stringify(root.mediaItems)
     writer.running = true
   }
   function addMedia(url) {
@@ -63,18 +62,7 @@ Item {
 
   Process {
     id: writer
-    property string payload: "[]"
-    command: ["sh", "-c", "dir=\"$(dirname \"$1\")\" && mkdir -p \"$dir\" && tmp=\"$1.tmp.$$\" && cat > \"$tmp\" && mv -f \"$tmp\" \"$1\"", "miniplayer", root.configPath]
-    stdinEnabled: true
-    onRunningChanged: {
-      if (running) {
-        Qt.callLater(function() {
-          writer.write(writer.payload)
-          if (typeof writer.closeStdin === "function") writer.closeStdin()
-          else writer.stdinEnabled = false
-        })
-      }
-    }
+    command: ["sh", "-c", "dir=\"$(dirname \"$1\")\" && mkdir -p \"$dir\" && tmp=\"$1.tmp.$$\" && printf '%s' \"$2\" > \"$tmp\" && mv -f \"$tmp\" \"$1\"", "miniplayer", root.configPath, JSON.stringify(root.mediaItems)]
   }
 
   FileDialog {
