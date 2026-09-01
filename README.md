@@ -1,4 +1,5 @@
 # MiniPlayer
+<img width="1092" height="716" alt="Preview" src="Preview.png" />
 
 Small Omarchy/Quickshell media panel that stays pinned to the top-right of the screen.
 
