@@ -30,7 +30,11 @@ Then toggle it with the Omarchy plugin shell integration:
 ```sh
 omarchy-shell shell toggle miniplayer
 ```
+## Remove
 
+```sh
+omarchy plugin remove miniplayer
+```
 ## Notes
 
 Video playback uses Qt Multimedia, so the available codecs depend on the Qt multimedia backend installed by the system.
