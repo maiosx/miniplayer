@@ -213,6 +213,34 @@ Item {
                 }
 
                 Rectangle {
+                  id: playbackToggle
+                  visible: opacity > 0
+                  opacity: isVideo && mediaHover.containsMouse ? 1 : 0
+                  Behavior on opacity { NumberAnimation { duration: 120 } }
+                  anchors.centerIn: parent
+                  width: 46
+                  height: 46
+                  radius: 23
+                  color: "#cc000000"
+                  border.width: 1
+                  border.color: "#60ffffff"
+
+                  Text {
+                    anchors.centerIn: parent
+                    text: video.playbackState === MediaPlayer.PlayingState ? "||" : ">"
+                    color: "white"
+                    font.pixelSize: video.playbackState === MediaPlayer.PlayingState ? 18 : 22
+                    font.bold: true
+                  }
+
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: video.playbackState === MediaPlayer.PlayingState ? video.pause() : video.play()
+                  }
+                }
+
+                Rectangle {
                   anchors.top: parent.top
                   anchors.right: parent.right
                   visible: opacity > 0
