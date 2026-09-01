@@ -179,6 +179,7 @@ Item {
                 clip: true
 
                 property bool isVideo: /\.(mp4|mkv|webm|mov)$/i.test(modelData.split("?")[0])
+                property bool audioUnlocked: false
 
                 Image {
                   id: image
@@ -205,8 +206,8 @@ Item {
                   fillMode: VideoOutput.PreserveAspectFit
                   autoPlay: true
                   loops: MediaPlayer.Infinite
-                  muted: !videoArea.containsMouse
-                  volume: videoArea.containsMouse ? 1.0 : 0.0
+                  muted: !(videoArea.containsMouse || audioUnlocked)
+                  volume: (videoArea.containsMouse || audioUnlocked) ? 1.0 : 0.0
                   visible: isVideo
                 }
 
@@ -233,20 +234,31 @@ Item {
                   }
                 }
 
-                Text {
-                  visible: isVideo && !videoArea.containsMouse
+                Rectangle {
+                  id: audioToggle
+                  visible: isVideo
                   anchors.bottom: parent.bottom
                   anchors.horizontalCenter: parent.horizontalCenter
                   anchors.bottomMargin: 8
-                  text: "Hover to play audio"
-                  color: "#ddffffff"
-                  font.pixelSize: 11
-                  Rectangle {
+                  width: toggleLabel.implicitWidth + 20
+                  height: 24
+                  radius: 12
+                  color: audioUnlocked ? "#cc2d7d46" : "#99000000"
+                  border.width: 1
+                  border.color: audioUnlocked ? "#4dff8a" : "#40ffffff"
+
+                  Text {
+                    id: toggleLabel
+                    anchors.centerIn: parent
+                    text: audioUnlocked ? "🔊 Unmuted" : "🔇 Tap to unmute"
+                    color: "#f5f5f7"
+                    font.pixelSize: 11
+                  }
+
+                  MouseArea {
                     anchors.fill: parent
-                    anchors.margins: -6
-                    radius: 8
-                    color: "#66000000"
-                    z: -1
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: audioUnlocked = !audioUnlocked
                   }
                 }
               }
