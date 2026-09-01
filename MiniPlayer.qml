@@ -173,7 +173,7 @@ Item {
                   id: image
                   anchors.fill: parent
                   source: isVideo ? "" : modelData
-                  fillMode: Image.PreserveAspectFit
+                  fillMode: Image.PreserveAspectCrop
                   cache: true
                   asynchronous: true
                   visible: !isVideo
@@ -182,7 +182,7 @@ Item {
                 AnimatedImage {
                   anchors.fill: parent
                   source: (!isVideo && /\.gif$/i.test(modelData.split("?")[0])) ? modelData : ""
-                  fillMode: Image.PreserveAspectFit
+                  fillMode: Image.PreserveAspectCrop
                   playing: true
                   visible: !isVideo && /\.gif$/i.test(modelData.split("?")[0])
                 }
@@ -191,7 +191,7 @@ Item {
                   id: video
                   anchors.fill: parent
                   source: isVideo ? modelData : ""
-                  fillMode: VideoOutput.PreserveAspectFit
+                  fillMode: VideoOutput.PreserveAspectCrop
                   autoPlay: true
                   loops: MediaPlayer.Infinite
                   muted: !(videoArea.containsMouse || audioUnlocked)
@@ -224,7 +224,9 @@ Item {
 
                 Rectangle {
                   id: audioToggle
-                  visible: isVideo
+                  visible: opacity > 0
+                  opacity: isVideo && videoArea.containsMouse ? 1 : 0
+                  Behavior on opacity { NumberAnimation { duration: 120 } }
                   anchors.bottom: parent.bottom
                   anchors.horizontalCenter: parent.horizontalCenter
                   anchors.bottomMargin: 8
