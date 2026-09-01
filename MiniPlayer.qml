@@ -79,7 +79,12 @@ Item {
     id: panel
     visible: root.opened
     implicitWidth: 420
-    implicitHeight: Math.min(700, 120 + Math.max(1, root.mediaItems.length) * 230)
+    implicitHeight: {
+      var itemCount = Math.max(1, root.mediaItems.length)
+      var mediaHeight = itemCount * 210
+      if (itemCount > 1) mediaHeight += (itemCount - 1) * 10
+      return Math.min(700, 36 + 10 + mediaHeight + 28)
+    }
     anchors.top: true
     anchors.right: true
     margins.top: 52
