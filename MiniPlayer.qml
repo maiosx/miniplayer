@@ -64,7 +64,7 @@ Item {
   Process {
     id: writer
     property string payload: "[]"
-    command: ["sh", "-c", "mkdir -p \"$(dirname \"$1\")\" && cat > \"$1\"", "miniplayer", root.configPath]
+    command: ["sh", "-c", "dir=\"$(dirname \"$1\")\" && mkdir -p \"$dir\" && tmp=\"$1.tmp.$$\" && cat > \"$tmp\" && mv -f \"$tmp\" \"$1\"", "miniplayer", root.configPath]
     stdinEnabled: true
     onRunningChanged: {
       if (running) {
