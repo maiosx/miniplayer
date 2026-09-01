@@ -82,7 +82,7 @@ Item {
     implicitHeight: Math.min(700, 120 + Math.max(1, root.mediaItems.length) * 230)
     anchors.top: true
     anchors.right: true
-    margins.top: 0
+    margins.top: 52
     margins.right: 18
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
@@ -104,7 +104,7 @@ Item {
 
         Item {
           width: parent.width
-          height: 36
+          height: 0
 
           Text {
             text: "MiniPlayer"
