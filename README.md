@@ -15,7 +15,13 @@ Small Omarchy/Quickshell media panel that stays pinned to the top-right of the s
 ## Install
 
 ```sh
-plugin add https://github.com/maiosx/miniplayer.git
+omarchy plugin add https://github.com/maiosx/miniplayer.git
+```
+
+Suggested keybind in `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + O", "miniplayer", "omarchy-shell shell toggle miniplayer")
 ```
 
 Then toggle it with the Omarchy plugin shell integration:
