@@ -6,6 +6,7 @@ import Quickshell.Wayland
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
+import QtQuick.Window
 import QtMultimedia
 
 Item {
@@ -168,6 +169,7 @@ Item {
 
                 property bool isVideo: /\.(mp4|mkv|webm|mov)$/i.test(modelData.split("?")[0])
                 property bool audioUnlocked: false
+                property bool isFullscreen: false
 
                 Image {
                   id: image
@@ -196,7 +198,48 @@ Item {
                   loops: MediaPlayer.Infinite
                   muted: !(videoArea.containsMouse || audioUnlocked)
                   volume: (videoArea.containsMouse || audioUnlocked) ? 1.0 : 0.0
-                  visible: isVideo
+                  visible: isVideo && !isFullscreen
+                }
+
+                Window {
+                  id: fullscreenWindow
+                  visible: isFullscreen
+                  width: Screen.width
+                  height: Screen.height
+                  color: "black"
+                  flags: Qt.Window | Qt.FramelessWindowHint
+
+                  Video {
+                    id: fullscreenVideo
+                    anchors.fill: parent
+                    source: isVideo ? modelData : ""
+                    fillMode: VideoOutput.PreserveAspectCrop
+                    autoPlay: true
+                    loops: MediaPlayer.Infinite
+                    muted: !audioUnlocked
+                    volume: audioUnlocked ? 1.0 : 0.0
+                  }
+
+                  Rectangle {
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.margins: 12
+                    width: 36
+                    height: 36
+                    radius: 18
+                    color: "#99000000"
+                    Text {
+                      anchors.centerIn: parent
+                      text: "×"
+                      color: "white"
+                      font.pixelSize: 18
+                    }
+                    MouseArea {
+                      anchors.fill: parent
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: isFullscreen = false
+                    }
+                  }
                 }
 
                 MouseArea {
@@ -223,7 +266,7 @@ Item {
                   MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: video.fullScreen = !video.fullScreen
+                    onClicked: isFullscreen = !isFullscreen
                   }
                 }
 
@@ -252,7 +295,7 @@ Item {
                   Behavior on opacity { NumberAnimation { duration: 120 } }
                   anchors.bottom: parent.bottom
                   anchors.horizontalCenter: parent.horizontalCenter
-                  anchors.bottomMargin: 8
+                  anchors.bottomMargin: 0
                   width: toggleLabel.implicitWidth + 20
                   height: 24
                   radius: 12
