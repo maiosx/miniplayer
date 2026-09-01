@@ -210,6 +210,9 @@ Item {
                 Rectangle {
                   anchors.top: parent.top
                   anchors.right: parent.right
+                  visible: opacity > 0
+                  opacity: isVideo && videoArea.containsMouse ? 1 : 0
+                  Behavior on opacity { NumberAnimation { duration: 120 } }
                   anchors.margins: 7
                   width: 30
                   height: 30
