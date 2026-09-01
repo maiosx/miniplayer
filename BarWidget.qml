@@ -21,7 +21,7 @@ BarWidget {
     id: glyph
     anchors.fill: parent
     bar: root.bar
-    text: "▣"
+    text: "M"
     tooltipText: "MiniPlayer"
     onPressed: root.toggleMiniPlayer()
   }
