@@ -79,7 +79,12 @@ Item {
     id: panel
     visible: root.opened
     implicitWidth: 420
-    implicitHeight: Math.min(700, 120 + Math.max(1, root.mediaItems.length) * 230)
+    implicitHeight: {
+      var itemCount = Math.max(1, root.mediaItems.length)
+      var mediaHeight = itemCount * 210
+      if (itemCount > 1) mediaHeight += (itemCount - 1) * 10
+      return Math.min(700, 36 + 10 + mediaHeight + 28)
+    }
     anchors.top: true
     anchors.right: true
     margins.top: 52
@@ -194,13 +199,13 @@ Item {
                   fillMode: VideoOutput.PreserveAspectCrop
                   autoPlay: true
                   loops: MediaPlayer.Infinite
-                  muted: !(videoArea.containsMouse || audioUnlocked)
-                  volume: (videoArea.containsMouse || audioUnlocked) ? 1.0 : 0.0
+                  muted: !(mediaHover.containsMouse || audioUnlocked)
+                  volume: (mediaHover.containsMouse || audioUnlocked) ? 1.0 : 0.0
                   visible: isVideo
                 }
 
                 MouseArea {
-                  id: videoArea
+                  id: mediaHover
                   anchors.fill: parent
                   hoverEnabled: true
                   acceptedButtons: Qt.NoButton
@@ -211,7 +216,7 @@ Item {
                   anchors.top: parent.top
                   anchors.right: parent.right
                   visible: opacity > 0
-                  opacity: isVideo && videoArea.containsMouse ? 1 : 0
+                  opacity: mediaHover.containsMouse ? 1 : 0
                   Behavior on opacity { NumberAnimation { duration: 120 } }
                   anchors.margins: 7
                   width: 30
@@ -228,7 +233,7 @@ Item {
                 Rectangle {
                   id: audioToggle
                   visible: opacity > 0
-                  opacity: isVideo && videoArea.containsMouse ? 1 : 0
+                  opacity: isVideo && mediaHover.containsMouse ? 1 : 0
                   Behavior on opacity { NumberAnimation { duration: 120 } }
                   anchors.bottom: parent.bottom
                   anchors.horizontalCenter: parent.horizontalCenter
