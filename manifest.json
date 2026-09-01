@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "miniplayer",
+  "name": "MiniPlayer",
+  "version": "1.0.0",
+  "author": "maiosx",
+  "license": "MIT",
+  "description": "Small top-right pinned media panel for images, GIFs, and MP4 videos.",
+  "kinds": ["overlay", "bar-widget"],
+  "keepLoaded": true,
+  "entryPoints": {"overlay": "MiniPlayer.qml", "barWidget": "BarWidget.qml"},
+  "barWidget": {"displayName": "MiniPlayer", "description": "Toggle the pinned media panel", "category": "Desktop", "aliases": ["miniplayer", "media", "gif", "video", "image"], "allowMultiple": false, "defaultSection": "right"}
+}
