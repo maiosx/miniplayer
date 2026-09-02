@@ -5,6 +5,7 @@ Small Omarchy/Quickshell media panel that stays pinned to the top-right of the s
 
 ## Features
 
+- Drag and drop support
 - Pin local images, GIFs, and videos
 - Animated GIF playback
 - MP4/MKV/WebM looping playback
