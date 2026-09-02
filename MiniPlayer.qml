@@ -1,0 +1,376 @@
+pragma ComponentBehavior: Bound
+
+import Quickshell
+import Quickshell.Io
+import Quickshell.Wayland
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Dialogs
+import QtMultimedia
+
+Item {
+  id: root
+  property var shell: null
+  property var manifest: null
+  property bool opened: false
+  property var mediaItems: []
+  property string configPath: (Quickshell.env("XDG_CONFIG_HOME") || ((Quickshell.env("HOME") || "") + "/.config")) + "/omarchy/miniplayer.json"
+
+  function toggle() { opened ? dismiss() : open("{}") }
+  function open(payload) { opened = true; reader.running = true }
+  function close() { opened = false }
+  function dismiss() {
+    opened = false
+    if (shell && typeof shell.hide === "function") shell.hide((manifest && manifest.id) || "miniplayer")
+  }
+  function save() {
+    writer.running = true
+  }
+  property int maxMediaItems: 20
+
+  function isLocalFileUrl(url) {
+    // Only allow local file:// URLs (or bare local paths with no scheme,
+    // which the FileDialog picker can hand us). Anything else — http(s),
+    // ftp, data:, or scheme-less strings that merely *look* like paths but
+    // resolve remotely — is rejected so dropped links can never trigger a
+    // network fetch (see security review Finding 1).
+    var s = (url || "").toString()
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) {
+      return /^file:\/\//i.test(s)
+    }
+    // No scheme at all: treat as a local filesystem path only if it doesn't
+    // look like a protocol-relative or host-qualified reference.
+    return s.length > 0 && !/^\/\//.test(s)
+  }
+  function isSupportedMedia(url) {
+    if (!root.isLocalFileUrl(url)) return false
+    var clean = (url || "").split("?")[0].split("#")[0]
+    return /\.(png|jpe?g|webp|gif|bmp|mp4|mkv|webm|mov)$/i.test(clean)
+  }
+  function addMedia(url) {
+    if (!url || !root.isLocalFileUrl(url)) return
+    if (root.mediaItems.indexOf(url) >= 0) return
+    if (root.mediaItems.length >= root.maxMediaItems) return
+    root.mediaItems = root.mediaItems.concat([url])
+    save()
+  }
+  function addDroppedUrls(urls) {
+    var added = false
+    for (var i = 0; i < urls.length; ++i) {
+      var u = urls[i].toString()
+      if (root.isSupportedMedia(u)) {
+        if (root.mediaItems.indexOf(u) < 0) added = true
+        root.addMedia(u)
+      }
+    }
+    return added
+  }
+  function removeMedia(index) {
+    var a = root.mediaItems.slice()
+    a.splice(index, 1)
+    root.mediaItems = a
+    save()
+  }
+
+  IpcHandler {
+    target: "miniplayer"
+    function toggle(): void { root.toggle() }
+    function open(): void { root.open("{}") }
+    function close(): void { root.dismiss() }
+    function status(): string { return root.opened ? "open" : "closed" }
+  }
+
+  Process {
+    id: reader
+    command: ["sh", "-c", "if [ -f \"$1\" ]; then cat \"$1\"; else printf '%s' '[]'; fi", "miniplayer", root.configPath]
+    stdout: StdioCollector { id: readerOut }
+    onRunningChanged: {
+      if (!running) {
+        try {
+          var parsed = JSON.parse(readerOut.text || "[]")
+          var items = Array.isArray(parsed) ? parsed : []
+          items = items.filter(function (u) { return root.isSupportedMedia(u) })
+          root.mediaItems = items.slice(0, root.maxMediaItems)
+        } catch (e) { root.mediaItems = [] }
+      }
+    }
+  }
+
+  Process {
+    id: writer
+    command: ["sh", "-c", "dir=\"$(dirname \"$1\")\" && mkdir -p -m 0700 \"$dir\" && tmp=\"$(mktemp \"$1.XXXXXX\")\" && printf '%s' \"$2\" > \"$tmp\" && mv -f \"$tmp\" \"$1\"", "miniplayer", root.configPath, JSON.stringify(root.mediaItems)]
+  }
+
+  FileDialog {
+    id: picker
+    title: "Choose media"
+    fileMode: FileDialog.OpenFiles
+    nameFilters: ["Media (*.png *.jpg *.jpeg *.webp *.gif *.bmp *.mp4 *.mkv *.webm)", "All files (*)"]
+    onAccepted: {
+      for (var i = 0; i < selectedFiles.length; ++i) root.addMedia(selectedFiles[i].toString())
+    }
+  }
+
+  PanelWindow {
+    id: panel
+    visible: root.opened
+    implicitWidth: 420
+    implicitHeight: {
+      var itemCount = Math.max(1, root.mediaItems.length)
+      var mediaHeight = itemCount * 210
+      if (itemCount > 1) mediaHeight += (itemCount - 1) * 10
+      return Math.min(700, 36 + 10 + mediaHeight + 28)
+    }
+    anchors.top: true
+    anchors.right: true
+    margins.top: 52
+    margins.right: 18
+    color: "transparent"
+    exclusionMode: ExclusionMode.Ignore
+    WlrLayershell.namespace: "miniplayer"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+
+    Rectangle {
+      id: background
+      anchors.fill: parent
+      radius: 18
+      color: "#e6151517"
+      border.width: dropArea.containsDrag ? 2 : 1
+      border.color: dropArea.containsDrag ? "#5aa9ff" : "#30ffffff"
+      Behavior on border.color { ColorAnimation { duration: 120 } }
+
+      DropArea {
+        id: dropArea
+        anchors.fill: parent
+        keys: ["text/uri-list"]
+
+        onEntered: function (drag) {
+          if (!drag.hasUrls) drag.accepted = false
+        }
+
+        onDropped: function (drop) {
+          if (drop.hasUrls) root.addDroppedUrls(drop.urls)
+          drop.accepted = drop.hasUrls
+        }
+      }
+
+      Rectangle {
+        anchors.fill: parent
+        radius: 18
+        visible: opacity > 0
+        opacity: dropArea.containsDrag ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: 120 } }
+        color: "#992a2a30"
+        border.width: 2
+        border.color: "#5aa9ff"
+
+        Text {
+          anchors.centerIn: parent
+          text: "Drop to pin media"
+          color: "#f5f5f7"
+          font.pixelSize: 16
+          font.bold: true
+        }
+      }
+
+      Column {
+        anchors.fill: parent
+        anchors.margins: 14
+        spacing: 10
+
+        Item {
+          width: parent.width
+          height: 36
+
+          Text {
+            text: "MiniPlayer"
+            color: "#f5f5f7"
+            font.pixelSize: 18
+            font.bold: true
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+          }
+
+          Row {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 8
+
+            Button {
+              text: "+"
+              onClicked: picker.open()
+              ToolTip.visible: hovered
+              ToolTip.text: "Add media"
+            }
+            Button {
+              text: "×"
+              onClicked: root.dismiss()
+            }
+          }
+        }
+
+        Flickable {
+          width: parent.width
+          height: parent.height - 46
+          contentWidth: width
+          contentHeight: mediaColumn.implicitHeight
+          clip: true
+          boundsBehavior: Flickable.StopAtBounds
+
+          Column {
+            id: mediaColumn
+            width: parent.width
+            spacing: 10
+
+            Text {
+              visible: root.mediaItems.length === 0
+              text: "No pinned media — click + or drag files here"
+              color: "#8e8e93"
+              width: parent.width
+              horizontalAlignment: Text.AlignHCenter
+              topPadding: 80
+            }
+
+            Repeater {
+              model: root.mediaItems
+              delegate: Rectangle {
+                required property string modelData
+                required property int index
+                width: mediaColumn.width
+                height: 210
+                radius: 12
+                color: "#121214"
+                clip: true
+
+                property bool isVideo: /\.(mp4|mkv|webm|mov)$/i.test(modelData.split("?")[0])
+                property bool audioUnlocked: false
+
+                Image {
+                  id: image
+                  anchors.fill: parent
+                  source: isVideo ? "" : modelData
+                  fillMode: Image.PreserveAspectCrop
+                  cache: true
+                  asynchronous: true
+                  visible: !isVideo
+                  // Bound decode cost regardless of the source file's actual
+                  // resolution (defends against decompression-bomb-style
+                  // images; see security review Finding 4).
+                  sourceSize.width: 2048
+                  sourceSize.height: 2048
+                }
+
+                AnimatedImage {
+                  anchors.fill: parent
+                  source: (!isVideo && /\.gif$/i.test(modelData.split("?")[0])) ? modelData : ""
+                  fillMode: Image.PreserveAspectCrop
+                  playing: true
+                  visible: !isVideo && /\.gif$/i.test(modelData.split("?")[0])
+                  sourceSize.width: 2048
+                  sourceSize.height: 2048
+                }
+
+                Video {
+                  id: video
+                  anchors.fill: parent
+                  source: isVideo ? modelData : ""
+                  fillMode: VideoOutput.PreserveAspectCrop
+                  autoPlay: true
+                  loops: MediaPlayer.Infinite
+                  muted: !(mediaHover.containsMouse || audioUnlocked)
+                  volume: (mediaHover.containsMouse || audioUnlocked) ? 1.0 : 0.0
+                  visible: isVideo
+                }
+
+                MouseArea {
+                  id: mediaHover
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  acceptedButtons: Qt.NoButton
+                  cursorShape: Qt.PointingHandCursor
+                }
+
+                Rectangle {
+                  id: playbackToggle
+                  visible: opacity > 0
+                  opacity: isVideo && mediaHover.containsMouse ? 1 : 0
+                  Behavior on opacity { NumberAnimation { duration: 120 } }
+                  anchors.centerIn: parent
+                  width: 46
+                  height: 46
+                  radius: 23
+                  color: "#cc000000"
+                  border.width: 1
+                  border.color: "#60ffffff"
+
+                  Text {
+                    anchors.centerIn: parent
+                    text: video.playbackState === MediaPlayer.PlayingState ? "||" : ">"
+                    color: "white"
+                    font.pixelSize: video.playbackState === MediaPlayer.PlayingState ? 18 : 22
+                    font.bold: true
+                  }
+
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: video.playbackState === MediaPlayer.PlayingState ? video.pause() : video.play()
+                  }
+                }
+
+                Rectangle {
+                  anchors.top: parent.top
+                  anchors.right: parent.right
+                  visible: opacity > 0
+                  opacity: mediaHover.containsMouse ? 1 : 0
+                  Behavior on opacity { NumberAnimation { duration: 120 } }
+                  anchors.margins: 7
+                  width: 30
+                  height: 30
+                  radius: 15
+                  color: "#99000000"
+                  Text { anchors.centerIn: parent; text: "×"; color: "white"; font.pixelSize: 18 }
+                  MouseArea {
+                    anchors.fill: parent
+                    onClicked: root.removeMedia(index)
+                  }
+                }
+
+                Rectangle {
+                  id: audioToggle
+                  visible: opacity > 0
+                  opacity: isVideo && mediaHover.containsMouse ? 1 : 0
+                  Behavior on opacity { NumberAnimation { duration: 120 } }
+                  anchors.bottom: parent.bottom
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  anchors.bottomMargin: 8
+                  width: toggleLabel.implicitWidth + 20
+                  height: 24
+                  radius: 12
+                  color: audioUnlocked ? "#cc2d7d46" : "#99000000"
+                  border.width: 1
+                  border.color: audioUnlocked ? "#4dff8a" : "#40ffffff"
+
+                  Text {
+                    id: toggleLabel
+                    anchors.centerIn: parent
+                    text: audioUnlocked ? "🔊 Unmuted" : "🔇 Tap to unmute"
+                    color: "#f5f5f7"
+                    font.pixelSize: 11
+                  }
+
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: audioUnlocked = !audioUnlocked
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
