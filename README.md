@@ -41,8 +41,10 @@ omarchy plugin remove miniplayer
 Video playback uses Qt Multimedia, so the available codecs depend on the Qt multimedia backend installed by the system.
 
 ## Known issues
-Gif/images have no close buttons currently
-Super + W does not stop playback on the fullscreen player
-No quickshell icon
+-Gif/images have no close buttons currently
+
+-Super + W does not stop playback on the fullscreen player
+
+-No quickshell icon
 
 MIT License.
