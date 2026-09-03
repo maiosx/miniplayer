@@ -18,6 +18,16 @@ Item {
   property int panelTopMargin: 52
   property var mediaItems: []
   property string configPath: (Quickshell.env("XDG_CONFIG_HOME") || ((Quickshell.env("HOME") || "") + "/.config")) + "/omarchy/miniplayer.json"
+  readonly property int maxMediaItems: 200
+
+  // MiniPlayer only ever displays locally-picked or locally-dropped media.
+  // Reject anything that isn't a local file:// URL so a drag source (e.g. a
+  // browser tab) or a tampered config file can't make this element fetch
+  // and auto-render arbitrary remote content.
+  function isAllowedMediaUrl(u) {
+    if (typeof u !== "string" || u.length === 0 || u.length > 4096) return false
+    return /^file:\/\//i.test(u)
+  }
 
   function toggle() { opened ? dismiss() : open("{}") }
   function open(payload) { opened = true; reader.running = true }
@@ -30,7 +40,9 @@ Item {
     writer.running = true
   }
   function addMedia(url) {
-    if (!url || root.mediaItems.indexOf(url) >= 0) return
+    if (!root.isAllowedMediaUrl(url)) return
+    if (root.mediaItems.indexOf(url) >= 0) return
+    if (root.mediaItems.length >= root.maxMediaItems) return
     root.mediaItems = root.mediaItems.concat([url])
     save()
   }
@@ -51,13 +63,22 @@ Item {
 
   Process {
     id: reader
-    command: ["sh", "-c", "if [ -f \"$1\" ]; then cat \"$1\"; else printf '%s' '[]'; fi", "miniplayer", root.configPath]
+    // - reject a symlinked config path outright (don't read through it)
+    // - cap the file size checked/read to 5 MiB before ever buffering it
+    // - hard-deadline the read at 5s so a stalled/blocking file can't wedge
+    //   the panel in a permanently "opened" state with no data
+    command: ["sh", "-c", "if [ -L \"$1\" ]; then printf '%s' '[]'; exit 0; fi; if [ ! -f \"$1\" ]; then printf '%s' '[]'; exit 0; fi; sz=$(stat -c%s \"$1\" 2>/dev/null || echo 0); if [ \"$sz\" -gt 5242880 ]; then printf '%s' '[]'; exit 0; fi; timeout 5 cat \"$1\"", "miniplayer", root.configPath]
     stdout: StdioCollector { id: readerOut }
     onRunningChanged: {
       if (!running) {
         try {
           var parsed = JSON.parse(readerOut.text || "[]")
-          root.mediaItems = Array.isArray(parsed) ? parsed : []
+          var list = Array.isArray(parsed) ? parsed : []
+          var filtered = []
+          for (var i = 0; i < list.length && filtered.length < root.maxMediaItems; ++i) {
+            if (root.isAllowedMediaUrl(list[i])) filtered.push(list[i])
+          }
+          root.mediaItems = filtered
         } catch (e) { root.mediaItems = [] }
       }
     }
@@ -65,7 +86,10 @@ Item {
 
   Process {
     id: writer
-    command: ["sh", "-c", "dir=\"$(dirname \"$1\")\" && mkdir -p \"$dir\" && tmp=\"$1.tmp.$$\" && printf '%s' \"$2\" > \"$tmp\" && mv -f \"$tmp\" \"$1\"", "miniplayer", root.configPath, JSON.stringify(root.mediaItems)]
+    // Use mktemp (O_EXCL, unpredictable name) instead of a PID-suffixed
+    // path, so a co-resident process can't pre-plant a symlink at a
+    // guessable temp-file name and redirect the write.
+    command: ["sh", "-c", "dir=\"$(dirname \"$1\")\" && mkdir -p \"$dir\" && tmp=\"$(mktemp \"$dir/.miniplayer.XXXXXX\")\" && printf '%s' \"$2\" > \"$tmp\" && mv -f \"$tmp\" \"$1\"", "miniplayer", root.configPath, JSON.stringify(root.mediaItems)]
   }
 
   FileDialog {
