@@ -17,8 +17,16 @@ Small Omarchy/Quickshell media panel that stays pinned to the top-right of the s
 ## Install
 
 ```sh
-omarchy plugin add https://github.com/maiosx/miniplayer.git
+omarchy plugin add https://github.com/maiosx/miniplayer.git --enable
 ```
+
+`omarchy plugin add` on its own only clones the plugin — it lands **disabled**, so the bar icon won't appear until you enable it. If you already installed it without `--enable`, run:
+
+```sh
+omarchy plugin enable miniplayer
+```
+
+(and, if prompted, pick which bar section to place it in — it defaults to `right`). You can confirm it's active with `omarchy plugin list`.
 
 Suggested keybind in `~/.config/hypr/bindings.lua`:
 
@@ -39,12 +47,5 @@ omarchy plugin remove miniplayer
 ## Notes
 
 Video playback uses Qt Multimedia, so the available codecs depend on the Qt multimedia backend installed by the system.
-
-## Known issues
--Gif/images have no close buttons currently
-
--Super + W does not stop playback on the fullscreen player
-
--No quickshell icon
 
 MIT License.
