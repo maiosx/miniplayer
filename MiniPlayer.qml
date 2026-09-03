@@ -212,6 +212,20 @@ Item {
                   }
                 }
 
+                SeekBar {
+                  id: miniSeekBar
+                  visible: isVideo && !isFullscreen && videoArea.containsMouse
+                  anchors.left: parent.left
+                  anchors.right: parent.right
+                  anchors.bottom: parent.bottom
+                  anchors.leftMargin: 10
+                  anchors.rightMargin: 10
+                  anchors.bottomMargin: 6
+                  position: video.position
+                  duration: video.duration
+                  onSeekRequested: function(ms) { video.seek(ms) }
+                }
+
                 Window {
                   id: fullscreenWindow
                   visible: isFullscreen
@@ -220,7 +234,34 @@ Item {
                   color: "black"
                   flags: Qt.Window | Qt.FramelessWindowHint
 
-                  onVisibleChanged: if (visible) fullscreenWindow.requestActivate()
+                  property bool controlsVisible: true
+
+                  onVisibleChanged: {
+                    if (visible) {
+                      fullscreenWindow.requestActivate()
+                      controlsVisible = true
+                      hideControlsTimer.restart()
+                    }
+                  }
+
+                  Timer {
+                    id: hideControlsTimer
+                    interval: 3000
+                    repeat: false
+                    onTriggered: fullscreenWindow.controlsVisible = false
+                  }
+
+                  MouseArea {
+                    id: activityArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    acceptedButtons: Qt.NoButton
+                    cursorShape: fullscreenWindow.controlsVisible ? Qt.ArrowCursor : Qt.BlankCursor
+                    onPositionChanged: {
+                      fullscreenWindow.controlsVisible = true
+                      hideControlsTimer.restart()
+                    }
+                  }
 
                   // Hyprland's Super+W (killactive) closes the focused window at the
                   // compositor level via a WM close request, not a key event delivered
@@ -267,6 +308,9 @@ Item {
                   }
 
                   Rectangle {
+                    visible: opacity > 0
+                    opacity: fullscreenWindow.controlsVisible ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 200 } }
                     anchors.top: parent.top
                     anchors.right: parent.right
                     anchors.margins: 12
@@ -288,6 +332,9 @@ Item {
                   }
 
                   Rectangle {
+                    visible: opacity > 0
+                    opacity: fullscreenWindow.controlsVisible ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 200 } }
                     anchors.top: parent.top
                     anchors.left: parent.left
                     anchors.margins: 12
@@ -309,6 +356,9 @@ Item {
                   }
 
                   Rectangle {
+                    visible: opacity > 0
+                    opacity: fullscreenWindow.controlsVisible ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 200 } }
                     anchors.bottom: parent.bottom
                     anchors.left: parent.left
                     anchors.margins: 12
@@ -331,6 +381,50 @@ Item {
                         else fullscreenVideo.play()
                       }
                     }
+                  }
+
+                  Rectangle {
+                    visible: opacity > 0
+                    opacity: fullscreenWindow.controlsVisible ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 200 } }
+                    anchors.top: parent.top
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.topMargin: 12
+                    width: fullscreenToggleLabel.implicitWidth + 24
+                    height: 36
+                    radius: 18
+                    color: audioUnlocked ? "#cc2d7d46" : "#99000000"
+                    border.width: 1
+                    border.color: audioUnlocked ? "#4dff8a" : "#40ffffff"
+
+                    Text {
+                      id: fullscreenToggleLabel
+                      anchors.centerIn: parent
+                      text: audioUnlocked ? "🔊 Unmuted" : "🔇 Tap to unmute"
+                      color: "#f5f5f7"
+                      font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                      anchors.fill: parent
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: audioUnlocked = !audioUnlocked
+                    }
+                  }
+
+                  SeekBar {
+                    visible: opacity > 0
+                    opacity: (fullscreenWindow.controlsVisible || hovered || dragging) ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 200 } }
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.leftMargin: 24
+                    anchors.rightMargin: 24
+                    anchors.bottomMargin: 60
+                    position: fullscreenVideo.position
+                    duration: fullscreenVideo.duration
+                    onSeekRequested: function(ms) { fullscreenVideo.seek(ms) }
                   }
                 }
 
@@ -388,7 +482,8 @@ Item {
                   Behavior on opacity { NumberAnimation { duration: 120 } }
                   anchors.bottom: parent.bottom
                   anchors.left: parent.left
-                  anchors.margins: 7
+                  anchors.leftMargin: 7
+                  anchors.bottomMargin: 18
                   width: 30
                   height: 30
                   radius: 15
@@ -420,9 +515,9 @@ Item {
                   visible: opacity > 0
                   opacity: isVideo && videoArea.containsMouse ? 1 : 0
                   Behavior on opacity { NumberAnimation { duration: 120 } }
-                  anchors.bottom: parent.bottom
+                  anchors.top: parent.top
                   anchors.horizontalCenter: parent.horizontalCenter
-                  anchors.bottomMargin: 0
+                  anchors.topMargin: 7
                   width: toggleLabel.implicitWidth + 20
                   height: 24
                   radius: 12
