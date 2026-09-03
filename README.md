@@ -8,7 +8,7 @@ Small Omarchy/Quickshell media panel that stays pinned to the top-right of the s
 - Drag and drop support
 - Pin local images, GIFs, and videos
 - Animated GIF playback
-- MP4/MKV/WebM looping playback
+- MP4 looping playback
 - Video audio is muted until the pointer hovers the video
 - Persistent pinned-media list in `~/.config/omarchy/miniplayer.json`
 - Minimal translucent UI
