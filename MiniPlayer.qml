@@ -6,6 +6,7 @@ import Quickshell.Wayland
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
+import QtQuick.Window
 import QtMultimedia
 
 Item {
@@ -13,6 +14,8 @@ Item {
   property var shell: null
   property var manifest: null
   property bool opened: false
+  property bool fullscreenOpen: false
+  property int panelTopMargin: 52
   property var mediaItems: []
   property string configPath: (Quickshell.env("XDG_CONFIG_HOME") || ((Quickshell.env("HOME") || "") + "/.config")) + "/omarchy/miniplayer.json"
 
@@ -26,44 +29,10 @@ Item {
   function save() {
     writer.running = true
   }
-  property int maxMediaItems: 20
-
-  function isLocalFileUrl(url) {
-    // Only allow local file:// URLs (or bare local paths with no scheme,
-    // which the FileDialog picker can hand us). Anything else — http(s),
-    // ftp, data:, or scheme-less strings that merely *look* like paths but
-    // resolve remotely — is rejected so dropped links can never trigger a
-    // network fetch (see security review Finding 1).
-    var s = (url || "").toString()
-    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) {
-      return /^file:\/\//i.test(s)
-    }
-    // No scheme at all: treat as a local filesystem path only if it doesn't
-    // look like a protocol-relative or host-qualified reference.
-    return s.length > 0 && !/^\/\//.test(s)
-  }
-  function isSupportedMedia(url) {
-    if (!root.isLocalFileUrl(url)) return false
-    var clean = (url || "").split("?")[0].split("#")[0]
-    return /\.(png|jpe?g|webp|gif|bmp|mp4|mkv|webm|mov)$/i.test(clean)
-  }
   function addMedia(url) {
-    if (!url || !root.isLocalFileUrl(url)) return
-    if (root.mediaItems.indexOf(url) >= 0) return
-    if (root.mediaItems.length >= root.maxMediaItems) return
+    if (!url || root.mediaItems.indexOf(url) >= 0) return
     root.mediaItems = root.mediaItems.concat([url])
     save()
-  }
-  function addDroppedUrls(urls) {
-    var added = false
-    for (var i = 0; i < urls.length; ++i) {
-      var u = urls[i].toString()
-      if (root.isSupportedMedia(u)) {
-        if (root.mediaItems.indexOf(u) < 0) added = true
-        root.addMedia(u)
-      }
-    }
-    return added
   }
   function removeMedia(index) {
     var a = root.mediaItems.slice()
@@ -88,9 +57,7 @@ Item {
       if (!running) {
         try {
           var parsed = JSON.parse(readerOut.text || "[]")
-          var items = Array.isArray(parsed) ? parsed : []
-          items = items.filter(function (u) { return root.isSupportedMedia(u) })
-          root.mediaItems = items.slice(0, root.maxMediaItems)
+          root.mediaItems = Array.isArray(parsed) ? parsed : []
         } catch (e) { root.mediaItems = [] }
       }
     }
@@ -98,7 +65,7 @@ Item {
 
   Process {
     id: writer
-    command: ["sh", "-c", "dir=\"$(dirname \"$1\")\" && mkdir -p -m 0700 \"$dir\" && tmp=\"$(mktemp \"$1.XXXXXX\")\" && printf '%s' \"$2\" > \"$tmp\" && mv -f \"$tmp\" \"$1\"", "miniplayer", root.configPath, JSON.stringify(root.mediaItems)]
+    command: ["sh", "-c", "dir=\"$(dirname \"$1\")\" && mkdir -p \"$dir\" && tmp=\"$1.tmp.$$\" && printf '%s' \"$2\" > \"$tmp\" && mv -f \"$tmp\" \"$1\"", "miniplayer", root.configPath, JSON.stringify(root.mediaItems)]
   }
 
   FileDialog {
@@ -115,15 +82,10 @@ Item {
     id: panel
     visible: root.opened
     implicitWidth: 420
-    implicitHeight: {
-      var itemCount = Math.max(1, root.mediaItems.length)
-      var mediaHeight = itemCount * 210
-      if (itemCount > 1) mediaHeight += (itemCount - 1) * 10
-      return Math.min(700, 36 + 10 + mediaHeight + 28)
-    }
+    implicitHeight: Math.min(700, Math.max(172, 74 + Math.max(1, root.mediaItems.length) * 220))
     anchors.top: true
     anchors.right: true
-    margins.top: 52
+    margins.top: root.panelTopMargin
     margins.right: 18
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
@@ -132,47 +94,11 @@ Item {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
     Rectangle {
-      id: background
       anchors.fill: parent
       radius: 18
       color: "#e6151517"
-      border.width: dropArea.containsDrag ? 2 : 1
-      border.color: dropArea.containsDrag ? "#5aa9ff" : "#30ffffff"
-      Behavior on border.color { ColorAnimation { duration: 120 } }
-
-      DropArea {
-        id: dropArea
-        anchors.fill: parent
-        keys: ["text/uri-list"]
-
-        onEntered: function (drag) {
-          if (!drag.hasUrls) drag.accepted = false
-        }
-
-        onDropped: function (drop) {
-          if (drop.hasUrls) root.addDroppedUrls(drop.urls)
-          drop.accepted = drop.hasUrls
-        }
-      }
-
-      Rectangle {
-        anchors.fill: parent
-        radius: 18
-        visible: opacity > 0
-        opacity: dropArea.containsDrag ? 1 : 0
-        Behavior on opacity { NumberAnimation { duration: 120 } }
-        color: "#992a2a30"
-        border.width: 2
-        border.color: "#5aa9ff"
-
-        Text {
-          anchors.centerIn: parent
-          text: "Drop to pin media"
-          color: "#f5f5f7"
-          font.pixelSize: 16
-          font.bold: true
-        }
-      }
+      border.width: 1
+      border.color: "#30ffffff"
 
       Column {
         anchors.fill: parent
@@ -198,14 +124,8 @@ Item {
             spacing: 8
 
             Button {
-              text: "+"
-              onClicked: picker.open()
-              ToolTip.visible: hovered
-              ToolTip.text: "Add media"
-            }
-            Button {
               text: "×"
-              onClicked: root.dismiss()
+              onClicked: if (!root.fullscreenOpen) root.close()
             }
           }
         }
@@ -225,7 +145,7 @@ Item {
 
             Text {
               visible: root.mediaItems.length === 0
-              text: "No pinned media — click + or drag files here"
+              text: "Drop a file to add"
               color: "#8e8e93"
               width: parent.width
               horizontalAlignment: Text.AlignHCenter
@@ -245,6 +165,18 @@ Item {
 
                 property bool isVideo: /\.(mp4|mkv|webm|mov)$/i.test(modelData.split("?")[0])
                 property bool audioUnlocked: false
+                property bool isFullscreen: false
+                property bool videoPaused: false
+                property int playbackPosition: 0
+
+                function setFullscreen(value) {
+                  if (value === isFullscreen) return
+                  playbackPosition = isFullscreen ? fullscreenVideo.position : video.position
+                  isFullscreen = value
+                  root.fullscreenOpen = value
+                  root.panelTopMargin = value ? -400 : 52
+                  seekTimer.restart()
+                }
 
                 Image {
                   id: image
@@ -254,11 +186,6 @@ Item {
                   cache: true
                   asynchronous: true
                   visible: !isVideo
-                  // Bound decode cost regardless of the source file's actual
-                  // resolution (defends against decompression-bomb-style
-                  // images; see security review Finding 4).
-                  sourceSize.width: 2048
-                  sourceSize.height: 2048
                 }
 
                 AnimatedImage {
@@ -267,24 +194,127 @@ Item {
                   fillMode: Image.PreserveAspectCrop
                   playing: true
                   visible: !isVideo && /\.gif$/i.test(modelData.split("?")[0])
-                  sourceSize.width: 2048
-                  sourceSize.height: 2048
                 }
 
                 Video {
                   id: video
                   anchors.fill: parent
-                  source: isVideo ? modelData : ""
+                  source: isVideo && !isFullscreen ? modelData : ""
                   fillMode: VideoOutput.PreserveAspectCrop
                   autoPlay: true
                   loops: MediaPlayer.Infinite
-                  muted: !(mediaHover.containsMouse || audioUnlocked)
-                  volume: (mediaHover.containsMouse || audioUnlocked) ? 1.0 : 0.0
-                  visible: isVideo
+                  muted: isFullscreen || !(videoArea.containsMouse || audioUnlocked)
+                  volume: isFullscreen ? 0.0 : ((videoArea.containsMouse || audioUnlocked) ? 1.0 : 0.0)
+                  visible: isVideo && !isFullscreen
+                  onSourceChanged: {
+                    if (videoPaused) pause()
+                    seekTimer.restart()
+                  }
+                }
+
+                Window {
+                  id: fullscreenWindow
+                  visible: isFullscreen
+                  width: Screen.width
+                  height: Screen.height
+                  color: "black"
+                  flags: Qt.Window | Qt.FramelessWindowHint
+
+                  Video {
+                    id: fullscreenVideo
+                    anchors.fill: parent
+                    source: isVideo && isFullscreen ? modelData : ""
+                    fillMode: VideoOutput.PreserveAspectCrop
+                    autoPlay: true
+                    loops: MediaPlayer.Infinite
+                    muted: !audioUnlocked
+                    volume: audioUnlocked ? 1.0 : 0.0
+                    onSourceChanged: {
+                      if (videoPaused) pause()
+                      seekTimer.restart()
+                    }
+                  }
+
+                  Timer {
+                    id: seekTimer
+                    interval: 100
+                    repeat: false
+                    onTriggered: {
+                      if (isFullscreen) fullscreenVideo.seek(playbackPosition)
+                      else video.seek(playbackPosition)
+                    }
+                  }
+
+                  Rectangle {
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: 12
+                    width: 36
+                    height: 36
+                    radius: 18
+                    color: "#99000000"
+                    Text {
+                      anchors.centerIn: parent
+                      text: "×"
+                      color: "white"
+                      font.pixelSize: 18
+                    }
+                    MouseArea {
+                      anchors.fill: parent
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: setFullscreen(false)
+                    }
+                  }
+
+                  Rectangle {
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.margins: 12
+                    width: 36
+                    height: 36
+                    radius: 18
+                    color: "#99000000"
+                    Text {
+                      anchors.centerIn: parent
+                      text: "⤡"
+                      color: "white"
+                      font.pixelSize: 15
+                    }
+                    MouseArea {
+                      anchors.fill: parent
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: setFullscreen(false)
+                    }
+                  }
+
+                  Rectangle {
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.margins: 12
+                    width: 36
+                    height: 36
+                    radius: 18
+                    color: "#99000000"
+                    Text {
+                      anchors.centerIn: parent
+                      text: videoPaused ? "▶" : "⏸"
+                      color: "white"
+                      font.pixelSize: 14
+                    }
+                    MouseArea {
+                      anchors.fill: parent
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: {
+                        videoPaused = !videoPaused
+                        if (videoPaused) fullscreenVideo.pause()
+                        else fullscreenVideo.play()
+                      }
+                    }
+                  }
                 }
 
                 MouseArea {
-                  id: mediaHover
+                  id: videoArea
                   anchors.fill: parent
                   hoverEnabled: true
                   acceptedButtons: Qt.NoButton
@@ -292,30 +322,22 @@ Item {
                 }
 
                 Rectangle {
-                  id: playbackToggle
+                  id: fullscreenToggle
                   visible: opacity > 0
-                  opacity: isVideo && mediaHover.containsMouse ? 1 : 0
+                  opacity: isVideo && videoArea.containsMouse ? 1 : 0
                   Behavior on opacity { NumberAnimation { duration: 120 } }
-                  anchors.centerIn: parent
-                  width: 46
-                  height: 46
-                  radius: 23
-                  color: "#cc000000"
-                  border.width: 1
-                  border.color: "#60ffffff"
-
-                  Text {
-                    anchors.centerIn: parent
-                    text: video.playbackState === MediaPlayer.PlayingState ? "||" : ">"
-                    color: "white"
-                    font.pixelSize: video.playbackState === MediaPlayer.PlayingState ? 18 : 22
-                    font.bold: true
-                  }
-
+                  anchors.top: parent.top
+                  anchors.left: parent.left
+                  anchors.margins: 7
+                  width: 30
+                  height: 30
+                  radius: 15
+                  color: "#99000000"
+                  Text { anchors.centerIn: parent; text: "⤢"; color: "white"; font.pixelSize: 15 }
                   MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: video.playbackState === MediaPlayer.PlayingState ? video.pause() : video.play()
+                    onClicked: setFullscreen(true)
                   }
                 }
 
@@ -323,7 +345,7 @@ Item {
                   anchors.top: parent.top
                   anchors.right: parent.right
                   visible: opacity > 0
-                  opacity: mediaHover.containsMouse ? 1 : 0
+                  opacity: isVideo && videoArea.containsMouse ? 1 : 0
                   Behavior on opacity { NumberAnimation { duration: 120 } }
                   anchors.margins: 7
                   width: 30
@@ -338,13 +360,47 @@ Item {
                 }
 
                 Rectangle {
+                  id: pauseToggle
+                  visible: opacity > 0
+                  opacity: isVideo && videoArea.containsMouse ? 1 : 0
+                  Behavior on opacity { NumberAnimation { duration: 120 } }
+                  anchors.bottom: parent.bottom
+                  anchors.left: parent.left
+                  anchors.margins: 7
+                  width: 30
+                  height: 30
+                  radius: 15
+                  color: "#99000000"
+                  Text {
+                    anchors.centerIn: parent
+                    text: videoPaused ? "▶" : "⏸"
+                    color: "white"
+                    font.pixelSize: 12
+                  }
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                      videoPaused = !videoPaused
+                      if (isFullscreen) {
+                        if (videoPaused) fullscreenVideo.pause()
+                        else fullscreenVideo.play()
+                      } else {
+                        if (videoPaused) video.pause()
+                        else video.play()
+                      }
+                    }
+                  }
+                }
+
+                Rectangle {
                   id: audioToggle
                   visible: opacity > 0
-                  opacity: isVideo && mediaHover.containsMouse ? 1 : 0
+                  opacity: isVideo && videoArea.containsMouse ? 1 : 0
                   Behavior on opacity { NumberAnimation { duration: 120 } }
                   anchors.bottom: parent.bottom
                   anchors.horizontalCenter: parent.horizontalCenter
-                  anchors.bottomMargin: 8
+                  anchors.bottomMargin: 0
                   width: toggleLabel.implicitWidth + 20
                   height: 24
                   radius: 12
@@ -369,6 +425,30 @@ Item {
               }
             }
           }
+        }
+      }
+
+      DropArea {
+        id: dropArea
+        anchors.fill: parent
+        anchors.margins: 2
+        onEntered: dropHighlight.visible = true
+        onExited: dropHighlight.visible = false
+        onDropped: function(drop) {
+          dropHighlight.visible = false
+          for (var i = 0; i < drop.urls.length; ++i)
+            root.addMedia(drop.urls[i].toString())
+          drop.acceptProposedAction()
+        }
+
+        Rectangle {
+          id: dropHighlight
+          anchors.fill: parent
+          radius: 16
+          color: "transparent"
+          border.width: 2
+          border.color: "#66ffffff"
+          visible: false
         }
       }
     }
