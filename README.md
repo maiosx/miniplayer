@@ -11,8 +11,8 @@ Small Omarchy/Quickshell media panel that stays pinned to the top-right of the s
 - MP4/MKV/WebM looping playback
 - Video audio is muted until the pointer hovers the video
 - Persistent pinned-media list in `~/.config/omarchy/miniplayer.json`
-- Toggle from the Omarchy shell/bar widget
 - Minimal translucent UI
+- Fullscreen Toggle
 
 ## Install
 
@@ -39,5 +39,9 @@ omarchy plugin remove miniplayer
 ## Notes
 
 Video playback uses Qt Multimedia, so the available codecs depend on the Qt multimedia backend installed by the system.
+Known issues: 
+Gif/images have no close buttons currently
+Super + W does not stop playback on the fullscreen player
+No quickshell icon
 
 MIT License.
