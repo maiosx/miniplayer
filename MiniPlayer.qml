@@ -17,27 +17,38 @@ Item {
   property bool fullscreenOpen: false
   property int panelTopMargin: 52
   property var mediaItems: []
-  property string configPath: (Quickshell.env("XDG_CONFIG_HOME") || ((Quickshell.env("HOME") || "") + "/.config")) + "/omarchy/miniplayer.json"
+  property string configDir: (Quickshell.env("XDG_CONFIG_HOME") || ((Quickshell.env("HOME") || "") + "/.config")) + "/omarchy"
+  property string configPath: root.configDir + "/miniplayer.json"
   readonly property int maxMediaItems: 200
 
   // MiniPlayer only ever displays locally-picked or locally-dropped media.
-  // Reject anything that isn't a local file:// URL so a drag source (e.g. a
-  // browser tab) or a tampered config file can't make this element fetch
-  // and auto-render arbitrary remote content.
+  // Reject anything that isn't a local file:// URL with an EMPTY (or
+  // "localhost") authority. A bare "^file://" prefix match is not enough:
+  // "file://somehost/share/x.mp4" also matches that prefix, and on Windows
+  // Qt resolves a non-empty, non-local host in a file: URL as a UNC path
+  // (\\somehost\share\x.mp4), turning a supposedly-local media add into an
+  // outbound SMB connection to an attacker-chosen host (NTLM leak vector).
+  // Requiring the character right after "file://" to be "/" (empty
+  // authority) or "localhost/" closes that off.
   function isAllowedMediaUrl(u) {
     if (typeof u !== "string" || u.length === 0 || u.length > 4096) return false
-    return /^file:\/\//i.test(u)
+    if (!/^file:\/\//i.test(u)) return false
+    var rest = u.slice(7) // strip the "file://" we just matched
+    // Defense in depth: don't let a percent-encoded "//" or "\" smuggle an
+    // authority-looking segment past a naive consumer further down the line.
+    if (/%2f%2f|%5c/i.test(rest)) return false
+    return rest.charAt(0) === "/" || /^localhost\//i.test(rest)
   }
 
   function toggle() { opened ? dismiss() : open("{}") }
-  function open(payload) { opened = true; reader.running = true }
+  function open(payload) { opened = true; configFile.reload() }
   function close() { opened = false }
   function dismiss() {
     opened = false
     if (shell && typeof shell.hide === "function") shell.hide((manifest && manifest.id) || "miniplayer")
   }
   function save() {
-    writer.running = true
+    configFile.setText(JSON.stringify(root.mediaItems))
   }
   function addMedia(url) {
     if (!root.isAllowedMediaUrl(url)) return
@@ -61,36 +72,63 @@ Item {
     function status(): string { return root.opened ? "open" : "closed" }
   }
 
+  // One-shot, narrowly-scoped directory creation. This is the only
+  // subprocess left in the file, and it's hardened on both axes the review
+  // flagged: the command list is exec'd directly (no "sh -c", so there's no
+  // shell metacharacter parsing to worry about even though configDir isn't
+  // attacker-controlled), and the environment is cleared and replaced with
+  // an explicit, minimal PATH so a hijacked PATH entry inherited from the
+  // session can't shadow the mkdir binary.
   Process {
-    id: reader
-    // - reject a symlinked config path outright (don't read through it)
-    // - cap the file size checked/read to 5 MiB before ever buffering it
-    // - hard-deadline the read at 5s so a stalled/blocking file can't wedge
-    //   the panel in a permanently "opened" state with no data
-    command: ["sh", "-c", "if [ -L \"$1\" ]; then printf '%s' '[]'; exit 0; fi; if [ ! -f \"$1\" ]; then printf '%s' '[]'; exit 0; fi; sz=$(stat -c%s \"$1\" 2>/dev/null || echo 0); if [ \"$sz\" -gt 5242880 ]; then printf '%s' '[]'; exit 0; fi; timeout 5 cat \"$1\"", "miniplayer", root.configPath]
-    stdout: StdioCollector { id: readerOut }
-    onRunningChanged: {
-      if (!running) {
-        try {
-          var parsed = JSON.parse(readerOut.text || "[]")
-          var list = Array.isArray(parsed) ? parsed : []
-          var filtered = []
-          for (var i = 0; i < list.length && filtered.length < root.maxMediaItems; ++i) {
-            if (root.isAllowedMediaUrl(list[i])) filtered.push(list[i])
-          }
-          root.mediaItems = filtered
-        } catch (e) { root.mediaItems = [] }
-      }
-    }
+    id: mkdirHelper
+    clearEnvironment: true
+    environment: ({ PATH: "/usr/bin:/bin" })
+    command: ["mkdir", "-p", root.configDir]
   }
 
-  Process {
-    id: writer
-    // Use mktemp (O_EXCL, unpredictable name) instead of a PID-suffixed
-    // path, so a co-resident process can't pre-plant a symlink at a
-    // guessable temp-file name and redirect the write.
-    command: ["sh", "-c", "dir=\"$(dirname \"$1\")\" && mkdir -p \"$dir\" && tmp=\"$(mktemp \"$dir/.miniplayer.XXXXXX\")\" && printf '%s' \"$2\" > \"$tmp\" && mv -f \"$tmp\" \"$1\"", "miniplayer", root.configPath, JSON.stringify(root.mediaItems)]
+  // Config is read/written through FileView rather than a shell pipeline:
+  // - nothing here spawns a process, so there's no inherited-environment
+  //   subprocess left to sandbox for this path
+  // - each operation is a single open() against configPath, not a separate
+  //   lstat/stat/size-check followed later by a second open of the same
+  //   mutable pathname -- so there's no window between "check" and "use"
+  //   for something else to swap the file underneath us
+  // - setText() goes through atomicWrites (write to a temp file, rename
+  //   over the target), which is the same "write elsewhere, rename into
+  //   place" guarantee the old mktemp-based writer provided
+  //
+  // Trade-off vs. the old reader: this follows a symlink at configPath the
+  // same way any normal file access would, rather than refusing to read
+  // through one outright -- QML has no O_NOFOLLOW-open primitive to do that
+  // race-free, and the old check-then-open version only *looked* like it
+  // rejected symlinks while still racing. Given every entry that comes out
+  // of this file is re-validated by isAllowedMediaUrl() before it's trusted
+  // for anything, that's an acceptable bound for this data path; it isn't
+  // an acceptable bound for arbitrary config, so don't reuse this pattern
+  // for files whose raw content gets trusted directly.
+  FileView {
+    id: configFile
+    path: root.configPath
+    preload: false
+    atomicWrites: true
+    onLoaded: {
+      try {
+        var parsed = JSON.parse(configFile.text() || "[]")
+        var list = Array.isArray(parsed) ? parsed : []
+        var filtered = []
+        for (var i = 0; i < list.length && filtered.length < root.maxMediaItems; ++i) {
+          if (root.isAllowedMediaUrl(list[i])) filtered.push(list[i])
+        }
+        root.mediaItems = filtered
+      } catch (e) { root.mediaItems = [] }
+    }
+    // Covers both "file doesn't exist yet" (first run, before any save())
+    // and genuine read errors -- either way we fall back to an empty list
+    // rather than leaving the panel showing stale/partial data.
+    onLoadFailed: (error) => { root.mediaItems = [] }
   }
+
+  Component.onCompleted: mkdirHelper.running = true
 
   FileDialog {
     id: picker
